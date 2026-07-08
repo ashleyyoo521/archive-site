@@ -1,0 +1,145 @@
+﻿---
+export const prerender = false;
+import { getArchiveItemById } from "../../lib/notion";
+
+const { id } = Astro.params;
+const item = await getArchiveItemById(id!);
+
+function getYoutubeId(url: string): string | null {
+  if (!url) return null;
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
+  return match ? match[1] : null;
+}
+const youtubeId = getYoutubeId(item.mediaUrl);
+const thumb = youtubeId
+  ? `https://img.youtube.com/vi/${youtubeId}/maxresdefault.jpg`
+  : item.mediaUrl;
+const thumbFallback = youtubeId
+  ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`
+  : "";
+---
+
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{item.name}</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 0;
+        background: #fff;
+      }
+      .back {
+        display: inline-block;
+        padding: 20px 40px 0;
+        text-decoration: none;
+        color: #666;
+        font-size: 14px;
+      }
+      .media-wrap {
+        display: flex;
+        justify-content: center;
+        padding: 20px 0 0;
+      }
+      .media-box {
+        width: 66%;
+        min-width: 320px;
+        aspect-ratio: 16 / 9;
+        background: #000;
+        position: relative;
+        cursor: pointer;
+        overflow: hidden;
+      }
+      .media-box img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .play-badge {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        background: rgba(0,0,0,0.55);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 26px;
+      }
+      .content {
+        max-width: 66%;
+        margin: 32px auto 120px;
+        padding: 0 20px;
+      }
+      .title {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 10px;
+      }
+      .tags {
+        font-size: 14px;
+        color: #888;
+        margin-bottom: 20px;
+      }
+      .note {
+        font-size: 16px;
+        line-height: 1.7;
+        color: #333;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <a class="back" href={`/archive/${item.category}`}>← 목록으로</a>
+
+    <div class="media-wrap">
+      <div class="media-box" id="mediaBox">
+        {thumb && (
+          <img src={thumb} alt={item.name} data-fallback={thumbFallback} id="thumbImg" />
+        )}
+        {youtubeId && <span class="play-badge" id="playBadge">▶</span>}
+      </div>
+    </div>
+
+    <div class="content">
+      <div class="title">{item.name}</div>
+      <div class="tags">{item.tags.join(" · ")}</div>
+      <div class="note">{item.note}</div>
+    </div>
+
+    <script define:vars={{ youtubeId }}>
+      const mediaBox = document.getElementById("mediaBox");
+      const thumbImg = document.getElementById("thumbImg");
+
+      // 고화질 썸네일이 없는 영상이면 자동으로 기본 화질로 대체
+      if (thumbImg) {
+        thumbImg.addEventListener("error", () => {
+          const fallback = thumbImg.getAttribute("data-fallback");
+          if (fallback) thumbImg.src = fallback;
+        });
+      }
+
+      if (youtubeId && mediaBox) {
+        mediaBox.addEventListener("click", () => {
+          mediaBox.innerHTML = "";
+          const iframe = document.createElement("iframe");
+          iframe.src = `https://www.youtube.com/embed/${youtubeId}?autoplay=1`;
+          iframe.allow = "autoplay; encrypted-media; picture-in-picture";
+          iframe.allowFullscreen = true;
+          // Astro 스코프 CSS가 동적으로 생성된 요소엔 안 먹기 때문에 직접 스타일 지정
+          iframe.style.width = "100%";
+          iframe.style.height = "100%";
+          iframe.style.border = "none";
+          iframe.style.display = "block";
+          mediaBox.style.cursor = "default";
+          mediaBox.appendChild(iframe);
+        });
+      }
+    </script>
+  </body>
+</html>

@@ -1,0 +1,18 @@
+﻿---
+const categories = ["광고", "그래픽", "영상", "모션", "브랜딩"];
+---
+
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>서연 아카이브</title>
+  </head>
+  <body>
+    <h1>Archive</h1>
+    <nav>
+      {categories.map((c) => (
+        <a href={`/archive/${c}`}>{c}</a>
+      ))}
+    </nav>
+  </body>
+</html>

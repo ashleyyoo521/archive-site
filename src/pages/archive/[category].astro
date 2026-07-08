@@ -1,0 +1,108 @@
+﻿---
+export const prerender = false;
+import { getArchiveItems } from "../../lib/notion";
+
+const categories = ["광고", "그래픽", "영상", "모션", "브랜딩"];
+const { category } = Astro.params;
+const items = await getArchiveItems({ category });
+
+function getYoutubeId(url: string): string | null {
+  if (!url) return null;
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
+  return match ? match[1] : null;
+}
+---
+
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <title>{category} 아카이브</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 0;
+        padding: 40px;
+        background: #fafafa;
+      }
+      nav { margin-bottom: 32px; }
+      nav a {
+        margin-right: 16px;
+        text-decoration: none;
+        color: #333;
+        font-weight: 500;
+      }
+      nav a.active {
+        color: #000;
+        border-bottom: 2px solid #000;
+      }
+      h1 { margin-bottom: 24px; }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        gap: 20px;
+      }
+      .card {
+        background: #fff;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+        text-decoration: none;
+        color: inherit;
+        display: block;
+      }
+      .thumb {
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        background: #eee;
+        overflow: hidden;
+      }
+      .thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .card-body { padding: 14px; }
+      .card-title {
+        font-weight: 600;
+        margin-bottom: 6px;
+      }
+      .tags {
+        font-size: 12px;
+        color: #888;
+      }
+      .empty { color: #999; }
+    </style>
+  </head>
+  <body>
+    <nav>
+      {categories.map((c) => (
+        <a href={`/archive/${c}`} class={c === category ? "active" : ""}>{c}</a>
+      ))}
+    </nav>
+
+    <h1>{category}</h1>
+
+    {items.length === 0 && <p class="empty">아직 등록된 항목이 없어요.</p>}
+
+    <div class="grid">
+      {items.map((item) => {
+        const youtubeId = getYoutubeId(item.mediaUrl);
+        const thumb = youtubeId
+          ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`
+          : item.mediaUrl;
+        return (
+          <a class="card" href={`/item/${item.id}`}>
+            <div class="thumb">
+              {thumb && <img src={thumb} alt={item.name} />}
+            </div>
+            <div class="card-body">
+              <div class="card-title">{item.name}</div>
+              <div class="tags">{item.tags.join(" · ")}</div>
+            </div>
+          </a>
+        );
+      })}
+    </div>
+  </body>
+</html>
