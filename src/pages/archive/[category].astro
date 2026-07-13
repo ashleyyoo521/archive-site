@@ -1,10 +1,42 @@
 ﻿---
 export const prerender = false;
-import { getArchiveItems } from "../../lib/notion";
+import { getArchiveItems, getFacetOptions, FACET_LABELS } from "../../lib/notion";
+import type { FacetKey } from "../../lib/notion";
 
 const categories = ["광고", "그래픽", "영상", "모션", "브랜딩"];
 const { category } = Astro.params;
 const items = await getArchiveItems({ category });
+const facetOptions = await getFacetOptions();
+
+const facetKeys = Object.keys(FACET_LABELS) as FacetKey[];
+
+const selectedTag = Astro.url.searchParams.get("tag");
+
+function itemAllTags(item: (typeof items)[number]): string[] {
+  return [
+    ...item.tags,
+    ...item.marketPosition,
+    ...item.productCategory,
+    ...item.target,
+    ...item.involvement,
+    ...item.marketingStrategy,
+    ...item.brandType,
+    ...item.companyVision,
+  ];
+}
+
+const filteredItems = selectedTag
+  ? items.filter((item) => itemAllTags(item).includes(selectedTag))
+  : items;
+
+function tagHref(tag: string): string {
+  if (tag === selectedTag) return "/archive/" + category;
+  return "/archive/" + category + "?tag=" + encodeURIComponent(tag);
+}
+
+function tagClass(tag: string): string {
+  return tag === selectedTag ? "dropdown-tag active" : "dropdown-tag";
+}
 
 function getYoutubeId(url: string): string | null {
   if (!url) return null;
@@ -18,64 +50,129 @@ function getYoutubeId(url: string): string | null {
     <meta charset="UTF-8" />
     <title>{category} 아카이브</title>
     <style>
-      body {
-        font-family: sans-serif;
-        margin: 0;
-        padding: 40px;
-        background: #fafafa;
-      }
-      nav { margin-bottom: 32px; }
-      nav a {
-        margin-right: 16px;
-        text-decoration: none;
-        color: #333;
-        font-weight: 500;
-      }
-      nav a.active {
-        color: #000;
-        border-bottom: 2px solid #000;
-      }
+      body { font-family: sans-serif; margin: 0; padding: 40px; background: #fafafa; }
+      nav.category-nav { margin-bottom: 24px; }
+      nav.category-nav a { margin-right: 16px; text-decoration: none; color: #333; font-weight: 500; }
+      nav.category-nav a.active { color: #000; border-bottom: 2px solid #000; }
       h1 { margin-bottom: 24px; }
-      .grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-        gap: 20px;
+
+      .facets {
+        display: flex; gap: 8px; margin-bottom: 32px;
+        border-top: 1px solid #e5e5e5; border-bottom: 1px solid #e5e5e5;
+        padding: 12px 0; flex-wrap: wrap;
       }
-      .card {
-        background: #fff;
-        border-radius: 8px;
-        overflow: hidden;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      .facet-item { position: relative; }
+      .facet-label {
+        display: inline-flex; align-items: center; gap: 6px;
+        font-size: 13px; font-weight: 600; color: #333;
+        background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 8px 14px; cursor: default;
+      }
+      .facet-label::after { content: "▾"; font-size: 10px; color: #999; }
+      .facet-dropdown {
+        display: none; position: absolute; top: 100%; left: 0; margin-top: 4px;
+        background: #fff; border: 1px solid #e0e0e0; border-radius: 10px;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.08); padding: 10px; z-index: 10;
+        min-width: 200px; max-width: 320px; flex-wrap: wrap; gap: 6px;
+      }
+      .facet-item:hover .facet-dropdown { display: flex; }
+      .dropdown-tag {
+        font-size: 13px; color: #555; text-decoration: none;
+        background: #f5f5f5; border: 1px solid transparent; border-radius: 999px; padding: 5px 12px; white-space: nowrap;
+      }
+      .dropdown-tag:hover { background: #eee; }
+      .dropdown-tag.active { background: #000; color: #fff; }
+      .facet-empty { font-size: 12px; color: #ccc; padding: 4px; }
+
+      .reset-tag { font-size: 13px; color: #888; text-decoration: underline; margin-bottom: 16px; display: inline-block; }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
+
+      /* 카드 및 카드 내부 링크: 밑줄/방문색 제거 */
+      .card,
+      .card:visited,
+      .card a,
+      .card a:visited,
+      .card a:hover,
+      .card a:active {
         text-decoration: none;
         color: inherit;
-        display: block;
       }
-      .thumb {
-        width: 100%;
-        aspect-ratio: 4 / 3;
-        background: #eee;
-        overflow: hidden;
+      .card {
+        background: #fff; border-radius: 8px; overflow: hidden;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.08); display: block; position: relative;
       }
-      .thumb img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        display: block;
-      }
+      .thumb { width: 100%; aspect-ratio: 4 / 3; background: #eee; overflow: hidden; }
+      .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
       .card-body { padding: 14px; }
-      .card-title {
-        font-weight: 600;
-        margin-bottom: 6px;
-      }
-      .tags {
-        font-size: 12px;
-        color: #888;
-      }
+      .card-company { font-size: 12px; color: #999; margin-bottom: 2px; }
+      .card-product { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+      .card-date { font-size: 12px; color: #bbb; margin-bottom: 8px; }
+      .card-tags { font-size: 12px; color: #888; }
       .empty { color: #999; }
+
+      .delete-btn {
+        position: absolute; top: 8px; right: 8px; z-index: 5;
+        width: 26px; height: 26px; border-radius: 50%;
+        background: rgba(0,0,0,0.55); color: #fff; border: none;
+        display: none; align-items: center; justify-content: center; font-size: 13px; cursor: pointer;
+      }
+      .card:hover .delete-btn { display: flex; }
+      .delete-btn:hover { background: rgba(200,0,0,0.8); }
+
+      .fab {
+        position: fixed; right: 28px; bottom: 28px; z-index: 50;
+        width: 52px; height: 52px; border-radius: 50%;
+        background: #000; color: #fff; border: none;
+        font-size: 26px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        display: flex; align-items: center; justify-content: center; line-height: 1;
+      }
+      .fab:hover { background: #333; }
+
+      .form-overlay {
+        display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+        align-items: flex-start; justify-content: center; z-index: 100; padding: 40px 20px; overflow-y: auto;
+      }
+      .form-overlay.open { display: flex; }
+      .form-box { background: #fff; border-radius: 12px; padding: 28px; width: 100%; max-width: 620px; }
+      .form-title { font-size: 18px; font-weight: 700; margin-bottom: 18px; }
+      .form-row { margin-bottom: 14px; }
+      .form-row label { display: block; font-size: 12px; font-weight: 700; color: #555; margin-bottom: 4px; }
+      .form-row input, .form-row select, .form-row textarea {
+        width: 100%; box-sizing: border-box; border: 1px solid #ddd; border-radius: 6px;
+        padding: 8px 10px; font-family: inherit; font-size: 14px;
+      }
+      .form-row textarea { min-height: 60px; resize: vertical; }
+      .form-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+      .media-preview {
+        margin-top: 8px; width: 100%; aspect-ratio: 16/9; background: #f0f0f0;
+        border-radius: 6px; overflow: hidden; display: none; align-items: center; justify-content: center;
+      }
+      .media-preview img { width: 100%; height: 100%; object-fit: cover; }
+      .media-preview.show { display: flex; }
+
+      .facet-form-group { margin-bottom: 10px; }
+      .facet-form-label { font-size: 12px; font-weight: 700; color: #999; margin-bottom: 6px; }
+      .facet-checkbox-list { display: flex; flex-wrap: wrap; gap: 6px; }
+      .facet-checkbox-btn {
+        font-size: 12px; color: #555; background: #f5f5f5; border: 1px solid transparent;
+        border-radius: 999px; padding: 4px 10px; cursor: pointer;
+      }
+      .facet-checkbox-btn.selected { background: #000; color: #fff; }
+
+      .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+      .form-btn { border: none; border-radius: 6px; padding: 10px 18px; font-size: 14px; cursor: pointer; }
+      .form-btn.cancel { background: #eee; color: #333; }
+      .form-btn.submit { background: #000; color: #fff; }
+      .form-btn.submit:disabled { background: #999; cursor: default; }
+      .form-error { color: #d00; font-size: 13px; margin-top: 10px; display: none; }
+
+      body.view-mode .fab { display: none !important; }
+      body.view-mode .delete-btn { display: none !important; }
     </style>
   </head>
   <body>
-    <nav>
+    <nav class="category-nav">
       {categories.map((c) => (
         <a href={`/archive/${c}`} class={c === category ? "active" : ""}>{c}</a>
       ))}
@@ -83,26 +180,271 @@ function getYoutubeId(url: string): string | null {
 
     <h1>{category}</h1>
 
-    {items.length === 0 && <p class="empty">아직 등록된 항목이 없어요.</p>}
+    {selectedTag && (
+      <a class="reset-tag" href={`/archive/${category}`}>✕ "{selectedTag}" 필터 해제</a>
+    )}
 
-    <div class="grid">
-      {items.map((item) => {
+    <div class="facets">
+      {facetKeys.map((key) => (
+        <div class="facet-item">
+          <span class="facet-label">{FACET_LABELS[key]}</span>
+          <div class="facet-dropdown">
+            {facetOptions[key].length > 0
+              ? facetOptions[key].map((tag) => (
+                  <a class={tagClass(tag)} href={tagHref(tag)}>{tag}</a>
+                ))
+              : <span class="facet-empty">등록된 옵션 없음</span>}
+          </div>
+        </div>
+      ))}
+    </div>
+
+    {filteredItems.length === 0 && <p class="empty">해당하는 항목이 없어요.</p>}
+
+    <div class="grid" id="grid">
+      {filteredItems.map((item) => {
         const youtubeId = getYoutubeId(item.mediaUrl);
         const thumb = youtubeId
           ? `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`
           : item.mediaUrl;
+        const allTags = itemAllTags(item);
         return (
-          <a class="card" href={`/item/${item.id}`}>
-            <div class="thumb">
-              {thumb && <img src={thumb} alt={item.name} />}
-            </div>
-            <div class="card-body">
-              <div class="card-title">{item.name}</div>
-              <div class="tags">{item.tags.join(" · ")}</div>
-            </div>
-          </a>
+          <div class="card" data-item-id={item.id}>
+            <button class="delete-btn" data-item-id={item.id} title="삭제">✕</button>
+            <a href={`/item/${item.id}`}>
+              <div class="thumb">
+                {thumb && <img src={thumb} alt={item.companyName} />}
+              </div>
+              <div class="card-body">
+                <div class="card-company">{item.companyName}</div>
+                <div class="card-product">{item.productName}</div>
+                <div class="card-date">{item.releaseDate}</div>
+                <div class="card-tags">{allTags.join(" · ")}</div>
+              </div>
+            </a>
+          </div>
         );
       })}
     </div>
+
+    <button class="fab" id="openFormBtn" title="새 항목 추가">+</button>
+
+    <div class="form-overlay" id="formOverlay">
+      <div class="form-box">
+        <div class="form-title">새 항목 추가 — {category}</div>
+
+        <div class="form-two-col">
+          <div class="form-row">
+            <label>회사명</label>
+            <input id="f_companyName" type="text" />
+          </div>
+          <div class="form-row">
+            <label>제품명 *</label>
+            <input id="f_productName" type="text" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>소제목</label>
+          <input id="f_subtitle" type="text" />
+        </div>
+
+        <div class="form-two-col">
+          <div class="form-row">
+            <label>공개일자</label>
+            <input id="f_releaseDate" type="date" />
+          </div>
+          <div class="form-row">
+            <label>미디어 타입</label>
+            <select id="f_mediaType">
+              <option value="image">image</option>
+              <option value="video">video</option>
+              <option value="link">link</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>미디어 URL (이미지 링크 또는 유튜브 링크)</label>
+          <input id="f_mediaUrl" type="text" placeholder="https://..." />
+          <div class="media-preview" id="mediaPreview">
+            <img id="mediaPreviewImg" src="" alt="" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>출처 링크 (Source)</label>
+          <input id="f_source" type="text" placeholder="https://..." />
+        </div>
+
+        <div class="form-row">
+          <label>메모 (Note)</label>
+          <textarea id="f_note"></textarea>
+        </div>
+
+        <div class="form-row">
+          <label>마케팅 목표</label>
+          <textarea id="f_marketingGoal"></textarea>
+        </div>
+        <div class="form-row">
+          <label>문제점 / 장애물</label>
+          <textarea id="f_problem"></textarea>
+        </div>
+        <div class="form-row">
+          <label>솔루션</label>
+          <textarea id="f_solution"></textarea>
+        </div>
+
+        {facetKeys.map((key) => (
+          <div class="facet-form-group">
+            <div class="facet-form-label">{FACET_LABELS[key]}</div>
+            <div class="facet-checkbox-list" data-facet-key={key}>
+              {facetOptions[key].length > 0
+                ? facetOptions[key].map((tag) => (
+                    <button type="button" class="facet-checkbox-btn" data-tag={tag}>{tag}</button>
+                  ))
+                : <span class="facet-empty">옵션 없음</span>}
+            </div>
+          </div>
+        ))}
+
+        <div class="form-error" id="formError">저장에 실패했어요. 다시 시도해줘.</div>
+
+        <div class="form-actions">
+          <button class="form-btn cancel" id="cancelFormBtn">취소</button>
+          <button class="form-btn submit" id="submitFormBtn">만들기</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="/mode-toggle.js" is:inline></script>
+    <script src="/undo.js" is:inline></script>
+    <script define:vars={{ category }}>
+      const openBtn = document.getElementById("openFormBtn");
+      const overlay = document.getElementById("formOverlay");
+      const cancelBtn = document.getElementById("cancelFormBtn");
+      const submitBtn = document.getElementById("submitFormBtn");
+      const errorEl = document.getElementById("formError");
+
+      const mediaUrlInput = document.getElementById("f_mediaUrl");
+      const mediaTypeSelect = document.getElementById("f_mediaType");
+      const preview = document.getElementById("mediaPreview");
+      const previewImg = document.getElementById("mediaPreviewImg");
+
+      function getYoutubeId(url) {
+        if (!url) return null;
+        const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{11})/);
+        return match ? match[1] : null;
+      }
+
+      function updatePreview() {
+        const url = mediaUrlInput.value.trim();
+        const youtubeId = getYoutubeId(url);
+        if (youtubeId) {
+          mediaTypeSelect.value = "video";
+          previewImg.src = `https://img.youtube.com/vi/${youtubeId}/hqdefault.jpg`;
+          preview.classList.add("show");
+        } else if (url) {
+          mediaTypeSelect.value = "image";
+          previewImg.src = url;
+          preview.classList.add("show");
+        } else {
+          preview.classList.remove("show");
+        }
+      }
+      mediaUrlInput.addEventListener("input", updatePreview);
+
+      openBtn.addEventListener("click", () => overlay.classList.add("open"));
+      cancelBtn.addEventListener("click", () => overlay.classList.remove("open"));
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) overlay.classList.remove("open");
+      });
+
+      document.querySelectorAll(".facet-checkbox-btn").forEach((btn) => {
+        btn.addEventListener("click", () => btn.classList.toggle("selected"));
+      });
+
+      submitBtn.addEventListener("click", async () => {
+        const productName = document.getElementById("f_productName").value.trim();
+        if (!productName) {
+          alert("제품명은 필수예요.");
+          return;
+        }
+
+        const facets = {};
+        document.querySelectorAll("[data-facet-key]").forEach((group) => {
+          const key = group.getAttribute("data-facet-key");
+          const selected = Array.from(group.querySelectorAll(".facet-checkbox-btn.selected")).map(
+            (b) => b.getAttribute("data-tag")
+          );
+          if (selected.length > 0) facets[key] = selected;
+        });
+
+        const payload = {
+          category,
+          companyName: document.getElementById("f_companyName").value,
+          productName,
+          subtitle: document.getElementById("f_subtitle").value,
+          releaseDate: document.getElementById("f_releaseDate").value,
+          mediaUrl: mediaUrlInput.value,
+          mediaType: mediaTypeSelect.value,
+          source: document.getElementById("f_source").value,
+          note: document.getElementById("f_note").value,
+          marketingGoal: document.getElementById("f_marketingGoal").value,
+          problem: document.getElementById("f_problem").value,
+          solution: document.getElementById("f_solution").value,
+          facets,
+        };
+
+        submitBtn.disabled = true;
+        errorEl.style.display = "none";
+        try {
+          const res = await fetch("/api/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json();
+          if (res.ok && data.id) {
+            if (window.pushHistory) window.pushHistory({ type: "createCard", id: data.id });
+            window.location.href = `/item/${data.id}`;
+          } else {
+            errorEl.style.display = "block";
+            submitBtn.disabled = false;
+          }
+        } catch {
+          errorEl.style.display = "block";
+          submitBtn.disabled = false;
+        }
+      });
+
+      document.querySelectorAll(".delete-btn").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const id = btn.getAttribute("data-item-id");
+          if (!confirm("이 항목을 삭제할까요?")) return;
+
+          btn.disabled = true;
+          try {
+            const res = await fetch("/api/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id }),
+            });
+            if (res.ok) {
+              document.querySelector(`.card[data-item-id="${id}"]`)?.remove();
+              if (window.pushHistory) window.pushHistory({ type: "deleteCard", id });
+            } else {
+              alert("삭제에 실패했어요.");
+              btn.disabled = false;
+            }
+          } catch {
+            alert("삭제에 실패했어요.");
+            btn.disabled = false;
+          }
+        });
+      });
+    </script>
   </body>
 </html>

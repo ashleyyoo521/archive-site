@@ -1,9 +1,23 @@
 ﻿---
 export const prerender = false;
-import { getArchiveItemById } from "../../lib/notion";
+import { getArchiveItemById, getFacetOptions, FACET_LABELS } from "../../lib/notion";
+import type { FacetKey } from "../../lib/notion";
 
 const { id } = Astro.params;
 const item = await getArchiveItemById(id!);
+const facetOptions = await getFacetOptions();
+const facetKeys = Object.keys(FACET_LABELS) as FacetKey[];
+
+const allTags = Array.from(new Set([
+  ...item.tags,
+  ...item.marketPosition,
+  ...item.productCategory,
+  ...item.target,
+  ...item.involvement,
+  ...item.marketingStrategy,
+  ...item.brandType,
+  ...item.companyVision,
+]));
 
 function getYoutubeId(url: string): string | null {
   if (!url) return null;
@@ -22,76 +36,103 @@ const thumbFallback = youtubeId
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
-    <title>{item.name}</title>
+    <title>{item.companyName} - {item.productName}</title>
     <style>
-      body {
-        font-family: sans-serif;
-        margin: 0;
-        background: #fff;
-      }
-      .back {
-        display: inline-block;
-        padding: 20px 40px 0;
-        text-decoration: none;
-        color: #666;
-        font-size: 14px;
-      }
-      .media-wrap {
-        display: flex;
-        justify-content: center;
-        padding: 20px 0 0;
-      }
+      body { font-family: sans-serif; margin: 0; background: #fff; }
+      .back { display: inline-block; padding: 20px 40px 0; text-decoration: none; color: #666; font-size: 14px; }
+      .media-wrap { display: flex; justify-content: center; padding: 20px 0 0; }
       .media-box {
-        width: 66%;
-        min-width: 320px;
-        aspect-ratio: 16 / 9;
-        background: #000;
-        position: relative;
-        cursor: pointer;
-        overflow: hidden;
+        width: 66%; min-width: 320px; aspect-ratio: 16 / 9; background: #000;
+        position: relative; cursor: pointer; overflow: hidden;
       }
-      .media-box img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        display: block;
-      }
+      .media-box img { width: 100%; height: 100%; object-fit: cover; display: block; }
       .play-badge {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        width: 72px;
-        height: 72px;
-        border-radius: 50%;
-        background: rgba(0,0,0,0.55);
-        color: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 26px;
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        width: 72px; height: 72px; border-radius: 50%; background: rgba(0,0,0,0.55);
+        color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26px;
       }
-      .content {
-        max-width: 66%;
-        margin: 32px auto 120px;
-        padding: 0 20px;
+
+      .layout-wrap { display: flex; justify-content: center; padding: 0 0 120px; }
+      .layout { display: flex; gap: 40px; width: 66%; min-width: 320px; margin: 32px 0 0; align-items: flex-start; }
+      .main-col { flex: 1; min-width: 0; }
+
+      .inline-field { margin-bottom: 6px; position: relative; }
+      .inline-field input, .inline-field textarea {
+        border: 1px solid transparent; background: transparent; font-family: inherit;
+        padding: 2px 4px; border-radius: 4px; width: 100%; box-sizing: border-box;
       }
-      .title {
-        font-size: 24px;
-        font-weight: 700;
-        margin-bottom: 10px;
+      .inline-field input:hover, .inline-field textarea:hover { background: #f7f7f7; }
+      .inline-field input:focus, .inline-field textarea:focus {
+        outline: none; border-color: #ccc; background: #fff;
       }
-      .tags {
-        font-size: 14px;
-        color: #888;
-        margin-bottom: 20px;
+      .company-input { font-size: 14px; color: #888; margin-bottom: 2px; }
+      .product-input { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+      .subtitle-input { font-size: 16px; color: #555; margin-bottom: 4px; }
+      .date-input { font-size: 13px; color: #aaa; }
+      .note-textarea { font-size: 16px; line-height: 1.7; color: #333; resize: vertical; min-height: 60px; }
+
+      .meta-block { margin-bottom: 20px; }
+      .note-block { margin-bottom: 28px; }
+
+      .field-block { margin-bottom: 24px; }
+      .field-label {
+        font-size: 13px; font-weight: 700; color: #333; margin-bottom: 6px;
+        display: flex; align-items: center; gap: 8px;
       }
-      .note {
-        font-size: 16px;
-        line-height: 1.7;
-        color: #333;
-        white-space: pre-wrap;
+      .save-status { font-size: 11px; color: #aaa; font-weight: 400; }
+      .field-textarea {
+        width: 100%; min-height: 90px; box-sizing: border-box;
+        border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 12px;
+        font-family: inherit; font-size: 14px; line-height: 1.6; color: #333;
+        resize: vertical;
       }
+      .field-textarea:focus { outline: none; border-color: #999; }
+
+      .side-col { width: 200px; flex-shrink: 0; position: sticky; top: 24px; }
+      .side-title { font-size: 13px; font-weight: 700; color: #333; margin-bottom: 10px; }
+      .tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+      .tag-chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: #f2f2f2; border-radius: 999px; padding: 5px 10px; font-size: 13px; color: #444;
+      }
+      .tag-remove {
+        cursor: pointer; color: #999; font-size: 12px; border: none; background: none; padding: 0; line-height: 1;
+      }
+      .tag-remove:hover { color: #d00; }
+      .tag-empty { font-size: 12px; color: #ccc; margin-bottom: 12px; }
+
+      .add-tag-wrap { position: relative; }
+      .add-tag-btn {
+        border: 1px solid #ddd; background: #fff; color: #333; border-radius: 6px;
+        width: 32px; height: 32px; cursor: pointer; font-size: 16px; line-height: 1;
+      }
+      .add-tag-btn:hover { background: #f5f5f5; }
+      .facet-panel {
+        display: none;
+        position: absolute; top: 0; right: 100%; margin-right: 8px;
+        background: #fff; border: 1px solid #e0e0e0; border-radius: 10px;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+        padding: 14px; width: 260px; max-height: 420px; overflow-y: auto; z-index: 20;
+      }
+      .add-tag-wrap:hover .facet-panel { display: block; }
+      .facet-group { margin-bottom: 12px; }
+      .facet-group-label { font-size: 12px; font-weight: 700; color: #999; margin-bottom: 6px; }
+      .facet-option-list { display: flex; flex-wrap: wrap; gap: 6px; }
+      .facet-option-btn {
+        font-size: 12px; color: #555; background: #f5f5f5; border: 1px solid transparent;
+        border-radius: 999px; padding: 4px 10px; cursor: pointer;
+      }
+      .facet-option-btn:hover { background: #eee; }
+      .facet-option-btn.added { background: #000; color: #fff; }
+
+      /* 보기 모드 */
+      body.view-mode .inline-field input,
+      body.view-mode .field-textarea,
+      body.view-mode .note-textarea {
+        pointer-events: none; background: #fafafa;
+      }
+      body.view-mode .tag-remove,
+      body.view-mode .add-tag-wrap { display: none !important; }
     </style>
   </head>
   <body>
@@ -99,24 +140,89 @@ const thumbFallback = youtubeId
 
     <div class="media-wrap">
       <div class="media-box" id="mediaBox">
-        {thumb && (
-          <img src={thumb} alt={item.name} data-fallback={thumbFallback} id="thumbImg" />
-        )}
+        {thumb && <img src={thumb} alt={item.companyName} data-fallback={thumbFallback} id="thumbImg" />}
         {youtubeId && <span class="play-badge" id="playBadge">▶</span>}
       </div>
     </div>
 
-    <div class="content">
-      <div class="title">{item.name}</div>
-      <div class="tags">{item.tags.join(" · ")}</div>
-      <div class="note">{item.note}</div>
+    <div class="layout-wrap">
+      <div class="layout">
+        <div class="main-col">
+          <div class="meta-block">
+            <div class="inline-field">
+              <input class="company-input" data-field="companyName" value={item.companyName} placeholder="회사명" />
+            </div>
+            <div class="inline-field">
+              <input class="product-input" data-field="productName" value={item.productName} placeholder="제품명" />
+            </div>
+            <div class="inline-field">
+              <input class="subtitle-input" data-field="subtitle" value={item.subtitle} placeholder="소제목" />
+            </div>
+            <div class="inline-field">
+              <input class="date-input" type="date" data-field="releaseDate" value={item.releaseDate} />
+            </div>
+          </div>
+
+          <div class="note-block field-label">메모 <span class="save-status" data-status="note"></span></div>
+          <div class="inline-field note-block">
+            <textarea class="note-textarea" data-field="note" placeholder="메모를 적어보세요">{item.note}</textarea>
+          </div>
+
+          <div class="field-block">
+            <div class="field-label">마케팅 목표 <span class="save-status" data-status="marketingGoal"></span></div>
+            <textarea class="field-textarea" data-field="marketingGoal" placeholder="이 캠페인의 마케팅 목표를 적어보세요">{item.marketingGoal}</textarea>
+          </div>
+
+          <div class="field-block">
+            <div class="field-label">문제점 / 장애물 <span class="save-status" data-status="problem"></span></div>
+            <textarea class="field-textarea" data-field="problem" placeholder="해결해야 했던 문제나 장애물을 적어보세요">{item.problem}</textarea>
+          </div>
+
+          <div class="field-block">
+            <div class="field-label">솔루션 <span class="save-status" data-status="solution"></span></div>
+            <textarea class="field-textarea" data-field="solution" placeholder="어떻게 문제를 해결했는지 적어보세요">{item.solution}</textarea>
+          </div>
+        </div>
+
+        <div class="side-col">
+          <div class="side-title">태그</div>
+          <div class="tag-list" id="tagList">
+            {allTags.length === 0 && <span class="tag-empty" id="tagEmpty">아직 태그 없음</span>}
+            {allTags.map((tag) => (
+              <span class="tag-chip" data-tag={tag}>
+                {tag}
+                <button class="tag-remove" data-tag={tag}>✕</button>
+              </span>
+            ))}
+          </div>
+
+          <div class="add-tag-wrap">
+            <button class="add-tag-btn" id="addTagBtn">+</button>
+            <div class="facet-panel" id="facetPanel">
+              {facetKeys.map((key) => (
+                <div class="facet-group">
+                  <div class="facet-group-label">{FACET_LABELS[key]}</div>
+                  <div class="facet-option-list">
+                    {facetOptions[key].length > 0
+                      ? facetOptions[key].map((tag) => (
+                          <button class="facet-option-btn" data-tag={tag}>{tag}</button>
+                        ))
+                      : <span class="tag-empty">옵션 없음</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
-    <script define:vars={{ youtubeId }}>
+    <script src="/mode-toggle.js" is:inline></script>
+    <script src="/undo.js" is:inline></script>
+    <script define:vars={{ youtubeId, itemId: item.id, existingTags: allTags }}>
       const mediaBox = document.getElementById("mediaBox");
       const thumbImg = document.getElementById("thumbImg");
 
-      // 고화질 썸네일이 없는 영상이면 자동으로 기본 화질로 대체
       if (thumbImg) {
         thumbImg.addEventListener("error", () => {
           const fallback = thumbImg.getAttribute("data-fallback");
@@ -131,7 +237,6 @@ const thumbFallback = youtubeId
           iframe.src = `https://www.youtube.com/embed/${youtubeId}?autoplay=1`;
           iframe.allow = "autoplay; encrypted-media; picture-in-picture";
           iframe.allowFullscreen = true;
-          // Astro 스코프 CSS가 동적으로 생성된 요소엔 안 먹기 때문에 직접 스타일 지정
           iframe.style.width = "100%";
           iframe.style.height = "100%";
           iframe.style.border = "none";
@@ -140,6 +245,114 @@ const thumbFallback = youtubeId
           mediaBox.appendChild(iframe);
         });
       }
+
+      const fieldEls = document.querySelectorAll("[data-field]");
+      fieldEls.forEach((el) => {
+        let timer;
+        el.dataset.oldValue = el.value;
+        const field = el.getAttribute("data-field");
+        const statusEl = document.querySelector(`[data-status="${field}"]`);
+
+        el.addEventListener("input", () => {
+          if (statusEl) statusEl.textContent = "입력 중...";
+          clearTimeout(timer);
+          timer = setTimeout(async () => {
+            if (statusEl) statusEl.textContent = "저장 중...";
+            const oldValue = el.dataset.oldValue;
+            const newValue = el.value;
+            try {
+              const res = await fetch("/api/update", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ id: itemId, type: "text", field, value: newValue }),
+              });
+              if (res.ok) {
+                if (statusEl) statusEl.textContent = "저장됨";
+                setTimeout(() => { if (statusEl) statusEl.textContent = ""; }, 1500);
+                if (oldValue !== newValue && window.pushHistory) {
+                  window.pushHistory({ type: "text", id: itemId, field, oldValue, newValue });
+                }
+                el.dataset.oldValue = newValue;
+              } else if (statusEl) {
+                statusEl.textContent = "저장 실패";
+              }
+            } catch {
+              if (statusEl) statusEl.textContent = "저장 실패";
+            }
+          }, 800);
+        });
+      });
+
+      const tagList = document.getElementById("tagList");
+      const tagEmpty = document.getElementById("tagEmpty");
+      let currentTags = new Set(existingTags);
+
+      function updateFacetButtonState() {
+        document.querySelectorAll(".facet-option-btn").forEach((btn) => {
+          const tag = btn.getAttribute("data-tag");
+          btn.classList.toggle("added", currentTags.has(tag));
+        });
+      }
+
+      function bindRemove(btn) {
+        btn.addEventListener("click", async () => {
+          const tag = btn.getAttribute("data-tag");
+          btn.disabled = true;
+          try {
+            const res = await fetch("/api/update", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id: itemId, type: "removeTag", tag }),
+            });
+            if (res.ok) {
+              btn.closest(".tag-chip")?.remove();
+              currentTags.delete(tag);
+              if (currentTags.size === 0 && tagEmpty) tagEmpty.style.display = "inline";
+              updateFacetButtonState();
+              if (window.pushHistory) window.pushHistory({ type: "removeTag", id: itemId, tag });
+            } else {
+              btn.disabled = false;
+            }
+          } catch {
+            btn.disabled = false;
+          }
+        });
+      }
+      tagList.querySelectorAll(".tag-remove").forEach(bindRemove);
+
+      async function addTag(value) {
+        if (!value || currentTags.has(value)) return;
+        try {
+          const res = await fetch("/api/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: itemId, type: "addTag", tag: value }),
+          });
+          if (res.ok) {
+            if (tagEmpty) tagEmpty.style.display = "none";
+            const chip = document.createElement("span");
+            chip.className = "tag-chip";
+            chip.setAttribute("data-tag", value);
+            chip.textContent = value;
+            const removeBtn = document.createElement("button");
+            removeBtn.className = "tag-remove";
+            removeBtn.setAttribute("data-tag", value);
+            removeBtn.textContent = "✕";
+            bindRemove(removeBtn);
+            chip.appendChild(removeBtn);
+            tagList.appendChild(chip);
+            currentTags.add(value);
+            updateFacetButtonState();
+            if (window.pushHistory) window.pushHistory({ type: "addTag", id: itemId, tag: value });
+          }
+        } catch {}
+      }
+
+      document.querySelectorAll(".facet-option-btn").forEach((btn) => {
+        btn.addEventListener("click", () => addTag(btn.getAttribute("data-tag")));
+      });
+
+      updateFacetButtonState();
     </script>
   </body>
 </html>
